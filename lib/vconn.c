@@ -1017,6 +1017,7 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
                 VLOG_WARN_RL(&rl, "received bad reply: %s",
                              ofp_to_string(reply->data, reply->size,
                                            NULL, NULL, 1));
+                ofpbuf_delete(reply);
                 return EPROTO;
             }
         }
@@ -1041,6 +1042,7 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
         default:
             VLOG_WARN_RL(&rl, "parse error in reply (%s)",
                          ofperr_to_string(retval));
+            ofpbuf_delete(reply);
             return EPROTO;
         }
     }
@@ -1086,9 +1088,10 @@ vconn_dump_flows(struct vconn *vconn,
         }
         fs->ofpacts = xmemdup(fs->ofpacts, fs->ofpacts_len);
         n_fses++;
+        ofpbuf_uninit(&ofpacts);
+        ofpbuf_delete(reply);
+        reply = NULL;
     }
-    ofpbuf_uninit(&ofpacts);
-    ofpbuf_delete(reply);
 
     if (error) {
         for (size_t i = 0; i < n_fses; i++) {
