@@ -1017,6 +1017,7 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
                 VLOG_WARN_RL(&rl, "received bad reply: %s",
                              ofp_to_string(reply->data, reply->size,
                                            NULL, NULL, 1));
+                ofpbuf_delete(*replyp);
                 *replyp = NULL;
                 return EPROTO;
             }
@@ -1033,6 +1034,7 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
             more = ofpmp_more(reply->header);
             reply = NULL;
             if (!more) {
+                ofpbuf_delete(*replyp);
                 *replyp = NULL;
                 return EOF;
             }
@@ -1041,6 +1043,7 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
         default:
             VLOG_WARN_RL(&rl, "parse error in reply (%s)",
                          ofperr_to_string(retval));
+            ofpbuf_delete(*replyp);
             *replyp = NULL;
             return EPROTO;
         }
