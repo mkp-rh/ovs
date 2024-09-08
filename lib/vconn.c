@@ -1032,9 +1032,9 @@ recv_flow_stats_reply(struct vconn *vconn, ovs_be32 send_xid,
 
         case EOF:
             more = ofpmp_more(reply->header);
+            ofpbuf_delete(reply);
             reply = NULL;
             if (!more) {
-                ofpbuf_delete(reply);
                 *replyp = NULL;
                 return EOF;
             }
