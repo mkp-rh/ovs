@@ -1186,9 +1186,9 @@ dp_packet_hwol_is_tunnel_gre(struct dp_packet *b)
 static inline bool
 dp_packet_hwol_is_tunnel(struct dp_packet *b)
 {
-    return !!(*dp_packet_ol_flags_ptr(b) & ~(DP_PACKET_OL_TX_TUNNEL_VXLAN |
-                                             DP_PACKET_OL_TX_TUNNEL_GRE |
-                                             DP_PACKET_OL_TX_TUNNEL_GENEVE);
+    return !!(*dp_packet_ol_flags_ptr(b) & (DP_PACKET_OL_TX_TUNNEL_VXLAN |
+                                            DP_PACKET_OL_TX_TUNNEL_GRE |
+                                            DP_PACKET_OL_TX_TUNNEL_GENEVE));
 }
 
 /* Returns 'true' if packet 'b' is marked for outer IPv4 checksum offload. */
