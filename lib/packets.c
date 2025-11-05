@@ -975,6 +975,19 @@ ipv6_string_mapped(char *addr_str, const struct in6_addr *addr)
 #define IPV6_FOR_EACH(VAR) for (int VAR = 0; VAR < 16; VAR++)
 #endif
 
+bool
+ipv6_addr_equals_masked(const struct in6_addr *a,
+                        const struct in6_addr *b,
+                        const struct in6_addr *mask)
+{
+    IPV6_FOR_EACH (i) {
+        if ((a->s6_addrX[i] ^ b->s6_addrX[i]) & mask->s6_addrX[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 struct in6_addr
 ipv6_addr_bitand(const struct in6_addr *a, const struct in6_addr *b)
 {
@@ -1084,8 +1097,8 @@ ipv6_is_cidr(const struct in6_addr *netmask)
 }
 
 bool
-ipv6_addr_equals_masked(const struct in6_addr *a, const struct in6_addr *b,
-                        int plen)
+ipv6_addr_equals_cidr(const struct in6_addr *a, const struct in6_addr *b,
+                      int plen)
 {
     struct in6_addr mask;
     struct in6_addr ma;

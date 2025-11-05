@@ -1189,6 +1189,11 @@ static inline bool ipv6_addr_equals(const struct in6_addr *a,
 #endif
 }
 
+/* Returns true if 'a' and 'b' are equal for set mask bits. */
+bool ipv6_addr_equals_masked(const struct in6_addr *a,
+                             const struct in6_addr *b,
+                             const struct in6_addr *mask);
+
 /* Checks the IPv6 address in 'mask' for all zeroes. */
 static inline bool ipv6_mask_is_any(const struct in6_addr *mask) {
     return ipv6_addr_equals(mask, &in6addr_any);
@@ -1613,8 +1618,8 @@ bool ipv6_is_zero(const struct in6_addr *a);
 struct in6_addr ipv6_create_mask(int mask);
 int ipv6_count_cidr_bits(const struct in6_addr *netmask);
 bool ipv6_is_cidr(const struct in6_addr *netmask);
-bool ipv6_addr_equals_masked(const struct in6_addr *a,
-                             const struct in6_addr *b, int plen);
+bool ipv6_addr_equals_cidr(const struct in6_addr *a,
+                           const struct in6_addr *b, int plen);
 
 bool ipv6_parse(const char *s, struct in6_addr *ip);
 char *ipv6_parse_masked(const char *s, struct in6_addr *ipv6,

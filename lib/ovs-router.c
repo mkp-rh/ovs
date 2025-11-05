@@ -213,7 +213,7 @@ ovs_router_lookup(uint32_t mark, const struct in6_addr *ip6_dst,
         }
 
         matched = (!rule->src_prefix ||
-                   ipv6_addr_equals_masked(&rule->from_addr, from_src, plen));
+                   ipv6_addr_equals_cidr(&rule->from_addr, from_src, plen));
 
         if (rule->invert) {
             matched = !matched;
