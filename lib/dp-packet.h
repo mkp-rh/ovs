@@ -598,6 +598,29 @@ dp_packet_get_inner_tcp_payload_length(const struct dp_packet *pkt)
     }
 }
 
+/* Return the size of the packet excluding the TCP payload. */
+static inline uint32_t
+dp_packet_get_tcp_headers_length(const struct dp_packet *pkt)
+{
+    struct tcp_header *tcp_hdr;
+    uint16_t tcp_offset;
+
+    tcp_hdr = dp_packet_inner_l4(pkt);
+
+    if (!tcp_hdr) {
+        tcp_hdr = dp_packet_l4(pkt);
+    }
+
+    if (!tcp_hdr) {
+        return 0;
+    }
+
+    tcp_offset = TCP_OFFSET(tcp_hdr->tcp_ctl);
+
+    return ((char *) tcp_hdr - (char *) dp_packet_eth(pkt))
+           + tcp_offset * 4;
+}
+
 static inline const void *
 dp_packet_get_udp_payload(const struct dp_packet *b)
 {
