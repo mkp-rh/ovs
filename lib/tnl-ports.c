@@ -83,7 +83,7 @@ tnl_port_free(struct tnl_port_in *p)
     free(p);
 }
 
-static void
+void
 tnl_port_init_flow(struct flow *flow, struct eth_addr mac,
                    struct in6_addr *addr, uint8_t nw_proto, ovs_be16 tp_port,
                    struct in6_addr *remote_ip)

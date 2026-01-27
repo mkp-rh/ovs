@@ -25,6 +25,9 @@
 #include "util.h"
 
 struct netdev_tunnel_config;
+void tnl_port_init_flow(struct flow *flow, struct eth_addr mac,
+                        struct in6_addr *addr, uint8_t nw_proto,
+                        ovs_be16 tp_port, struct in6_addr *remote_ip);
 odp_port_t tnl_port_map_lookup(struct flow *flow, struct flow_wildcards *wc);
 
 void tnl_port_map_insert(odp_port_t,  const struct netdev_tunnel_config *cfg,

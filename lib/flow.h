@@ -1134,6 +1134,56 @@ static inline bool is_nd(const struct flow *flow,
     return false;
 }
 
+static inline bool is_toobig(const struct flow *flow,
+                             struct flow_wildcards *wc)
+{
+    if (is_icmpv6(flow, wc)) {
+        if (wc) {
+            memset(&wc->masks.tp_dst, 0xff, sizeof wc->masks.tp_dst);
+        }
+        if (flow->tp_dst != htons(0)) {
+            return false;
+        }
+
+        if (wc) {
+            memset(&wc->masks.tp_src, 0xff, sizeof wc->masks.tp_src);
+        }
+        return (flow->tp_src == htons(ICMP6_PACKET_TOO_BIG));
+    }
+    return false;
+}
+
+static inline bool is_icmp(const struct flow *flow,
+                           struct flow_wildcards *wc)
+{
+    if (get_dl_type(flow) == htons(ETH_TYPE_IP)) {
+        if (wc) {
+            memset(&wc->masks.nw_proto, 0xff, sizeof wc->masks.nw_proto);
+        }
+        return flow->nw_proto == IPPROTO_ICMP;
+    }
+    return false;
+}
+
+static inline bool is_fragneeded(const struct flow *flow,
+                                 struct flow_wildcards *wc)
+{
+    if (is_icmp(flow, wc)) {
+        if (wc) {
+            memset(&wc->masks.tp_src, 0xff, sizeof wc->masks.tp_dst);
+        }
+        if (flow->tp_src != htons(ICMP4_DST_UNREACH)) {
+            return false;
+        }
+
+        if (wc) {
+            memset(&wc->masks.tp_dst, 0xff, sizeof wc->masks.tp_dst);
+        }
+        return (flow->tp_dst == htons(ICMP4_FRAG_NEEDED));
+    }
+    return false;
+}
+
 static inline bool is_arp(const struct flow *flow)
 {
     return (flow->dl_type == htons(ETH_TYPE_ARP));

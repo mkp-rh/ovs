@@ -3,7 +3,7 @@ Post-v3.7.0
    - Userspace datapath:
      * ARP/ND lookups for native tunnel are now rate limited.
      * MTU can now be set on tunnel interfaces with the mtu_request
-       parameter.
+       parameter, or through Fragmentation Needed or Packet Too Big packets.
 
 
 v3.7.0 - xx xxx xxxx

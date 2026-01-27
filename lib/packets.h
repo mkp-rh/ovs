@@ -779,6 +779,9 @@ BUILD_ASSERT_DECL(IP_HEADER_LEN == sizeof(struct ip_header));
 #define ICMP4_INFOREQUEST 15
 #define ICMP4_INFOREPLY 16
 
+/* ICMPv4 codes. */
+#define ICMP4_FRAG_NEEDED 4
+
 #define ICMP_HEADER_LEN 8
 struct icmp_header {
     uint8_t icmp_type;

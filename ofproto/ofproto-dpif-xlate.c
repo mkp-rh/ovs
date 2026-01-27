@@ -73,6 +73,7 @@ COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);
 COVERAGE_DEFINE(xlate_actions_too_many_output);
 COVERAGE_DEFINE(xlate_actions_sent_packet);
+COVERAGE_DEFINE(xlate_actions_mtu_update)
 
 VLOG_DEFINE_THIS_MODULE(ofproto_dpif_xlate);
 
@@ -4414,14 +4415,140 @@ xport_has_ip(const struct xport *xport)
     return n_in6 ? true : false;
 }
 
-static bool check_neighbor_reply(struct xlate_ctx *ctx, struct flow *flow)
+static void
+handle_icmp_mtu_update(struct xlate_ctx *ctx, struct flow *flow,
+                       struct flow_wildcards *wc)
 {
-    if (flow->dl_type == htons(ETH_TYPE_ARP) ||
-        flow->nw_proto == IPPROTO_ICMPV6) {
-        return is_neighbor_reply_correct(ctx, flow);
+    const struct dp_packet *packet = ctx->xin->packet;
+    struct flow_wildcards tnl_wc;
+    struct flow tnl_flow;
+    uint16_t new_mtu;
+
+    if (!ctx->xin->allow_side_effects || !packet) {
+        return;
     }
 
-    return false;
+    if (!dp_packet_l4(packet)) {
+        return;
+    }
+
+    if (is_fragneeded(flow, wc)) {
+        const struct icmp_header *icmp = dp_packet_l4(packet);
+        struct in6_addr addr, remote_ip;
+        const struct udp_header *udp;
+        const struct ip_header *ip;
+        ovs_be16 tp_port = 0;
+
+        if (dp_packet_l4_size(packet) < ICMP_HEADER_LEN + IP_HEADER_LEN +
+                                        UDP_HEADER_LEN) {
+            return;
+        }
+
+        /* Extract MTU from ICMP header. */
+        new_mtu = ntohs(icmp->icmp_fields.frag.mtu);
+
+        if (new_mtu < IP_MTU_MIN) {
+            return;
+        }
+
+        ip = ALIGNED_CAST(const struct ip_header *,
+                          (const uint8_t *) icmp + ICMP_HEADER_LEN);
+
+        if (IP_IHL(ip->ip_ihl_ver) * 4 > sizeof(struct ip_header)) {
+            /* IP options not supported on tunnel packets. */
+            return;
+        }
+        if (ip->ip_proto == IPPROTO_UDP) {
+            udp = ALIGNED_CAST(const struct udp_header *, ip + 1);
+            tp_port = udp->udp_dst;
+        }
+        in6_addr_set_mapped_ipv4(&addr, get_16aligned_be32(&ip->ip_src));
+        in6_addr_set_mapped_ipv4(&remote_ip, get_16aligned_be32(&ip->ip_dst));
+        memset(&tnl_flow, 0 , sizeof tnl_flow);
+        tnl_port_init_flow(&tnl_flow, flow->dl_dst, &addr, ip->ip_proto,
+                           tp_port, &remote_ip);
+    } else if (is_toobig(flow, wc)) {
+        const struct icmp6_data_header *icmp6 = dp_packet_l4(packet);
+        const struct ovs_16aligned_ip6_hdr *ip6;
+        struct in6_addr addr, remote_ip;
+        ovs_be16 tp_port = 0;
+        const void *l4_buf;
+        uint8_t nw_proto;
+        uint8_t nw_frag;
+        size_t l4_len;
+
+        if (dp_packet_l4_size(packet) < ICMP6_DATA_HEADER_LEN +
+                                        IPV6_HEADER_LEN +
+                                        UDP_HEADER_LEN) {
+            return;
+        }
+
+        new_mtu = ntohl(get_16aligned_be32(&icmp6->icmp6_data.be32[0]));
+
+        if (new_mtu < IPV6_MTU_MIN) {
+            return;
+        }
+
+        ip6 = ALIGNED_CAST(const struct ovs_16aligned_ip6_hdr *,
+                           (const uint8_t *) icmp6 + ICMP6_DATA_HEADER_LEN);
+
+        nw_proto = ip6->ip6_nxt;
+        l4_buf = ip6 + 1;
+        l4_len = dp_packet_l4_size(packet) - sizeof *ip6;
+        if (!parse_ipv6_ext_hdrs(&l4_buf, &l4_len, &nw_proto, &nw_frag,
+                                 NULL, NULL)) {
+            return;
+        }
+        if (nw_frag == FLOW_NW_FRAG_LATER) {
+            return;
+        }
+
+        memcpy(&remote_ip, &ip6->ip6_dst, sizeof(remote_ip));
+        memcpy(&addr, &ip6->ip6_src, sizeof(addr));
+        if (nw_proto == IPPROTO_UDP) {
+            const struct udp_header *udp = l4_buf;
+            tp_port = udp->udp_dst;
+        }
+
+        memset(&tnl_flow, 0 , sizeof tnl_flow);
+        tnl_port_init_flow(&tnl_flow, flow->dl_dst, &addr, nw_proto, tp_port,
+                       &remote_ip);
+    } else {
+        return;
+    }
+
+    memset(&tnl_wc, 0 , sizeof tnl_wc);
+    odp_port_t tnl_port = tnl_port_map_lookup(&tnl_flow, &tnl_wc);
+    if (tnl_port == ODPP_NONE) {
+        return;
+    }
+
+    struct xlate_cfg *xcfg = ovsrcu_get(struct xlate_cfg *, &xcfgp);
+    struct xport *xport = NULL;
+    xport = xport_lookup(xcfg,
+                         odp_port_to_ofport(ctx->xbridge->ofproto->backer,
+                                            tnl_port));
+    if (!xport || !xport->is_tunnel || !xport->netdev) {
+        return;
+    }
+
+    int curr_mtu;
+    if (netdev_get_mtu(xport->netdev, &curr_mtu) || curr_mtu < new_mtu) {
+        return;
+    }
+
+    /* Update the tunnel MTU. */
+    if (netdev_set_mtu(xport->netdev, new_mtu)) {
+        /* Don't log if MTU isn't updated. */
+        return;
+    }
+
+    xlate_report(ctx, OFT_DETAIL, "Updated tunnel %s MTU to %u",
+                 netdev_get_name(xport->netdev), new_mtu);
+    COVERAGE_INC(xlate_actions_mtu_update);
+    VLOG_INFO("%s: Tunnel MTU reduced from %i to %i",
+              netdev_get_name(xport->netdev),
+              curr_mtu, new_mtu);
 }
 
 static bool
@@ -4443,12 +4570,16 @@ terminate_native_tunnel(struct xlate_ctx *ctx, const struct xport *xport,
 
         /* If no tunnel port was found and it's about an ARP or ICMPv6 packet,
          * do tunnel neighbor snooping. */
-        if (*tnl_port == ODPP_NONE &&
-            (check_neighbor_reply(ctx, flow) || is_garp(flow, wc))) {
-            tnl_neigh_snoop(flow, wc, ctx->xbridge->name,
-                            ctx->xin->allow_side_effects);
-        } else if (*tnl_port != ODPP_NONE &&
-                   ctx->xin->allow_side_effects &&
+        if (*tnl_port == ODPP_NONE) {
+            if (is_garp(flow, wc) ||
+                ((is_nd(flow, NULL) || is_arp(flow)) &&
+                 is_neighbor_reply_correct(ctx, flow))) {
+                tnl_neigh_snoop(flow, wc, ctx->xbridge->name,
+                                ctx->xin->allow_side_effects);
+            } else {
+                handle_icmp_mtu_update(ctx, flow, wc);
+            }
+        } else if (ctx->xin->allow_side_effects &&
                    dl_type_is_ip_any(flow->dl_type)) {
             struct eth_addr mac = flow->dl_src;
             struct in6_addr s_ip6;
