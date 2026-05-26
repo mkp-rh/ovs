@@ -2966,6 +2966,7 @@ set_stp(struct ofproto *ofproto_, const struct ofproto_stp_settings *s)
         stp_set_max_age(ofproto->stp, s->max_age);
         stp_set_forward_delay(ofproto->stp, s->fwd_delay);
     }  else {
+        struct ofbundle *bundle;
         struct ofport *ofport;
 
         HMAP_FOR_EACH (ofport, hmap_node, &ofproto->up.ports) {
